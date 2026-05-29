@@ -1,0 +1,15 @@
+ansible_connection: network_cli
+ansible_network_os: ios
+ansible_user: ztp_demo_user
+ansible_password: change-me
+ansible_become: true
+ansible_become_method: enable
+ansible_become_password: change-me
+
+domain_name: ztp-demo.local
+name_server1: 1.1.1.1
+name_server2: 8.8.8.8
+ntp_server1: time.example.net
+syslog_host1: 10.10.10.50
+ios_target_version: "17.12.1"
+nxos_target_version: "10.4(1)"

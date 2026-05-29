@@ -1,0 +1,110 @@
+# ── ZTP Stack ──────────────────────────────────────────────────────────────────
+#
+# Four services:
+#   registry  Flask API (port 5000) + Ansible runner
+#   poller    OpenGear console poller
+#   web       nginx (port 80) — serves ztp.py, config.json, IOS images
+#   dhcp      dnsmasq DHCP server (host networking — must see the mgmt LAN)
+#
+# Required bind mounts (configure paths in .env — no defaults, must be set explicitly):
+#   ANSIBLE_DIR          path to ansible/ from the repo on this host
+#   VAULT_PASS_FILE      path to ansible/.vault_pass.txt on this host
+#   IOS_IMAGES_DIR       directory containing *.bin IOS images
+#
+# Secrets (set in .env, never commit that file):
+#   OPENGEAR_USER / OPENGEAR_PASSWORD
+#   DHCP_INTERFACE  — physical NIC the DHCP server should listen on
+
+services:
+
+  # ── Flask registry API + Ansible runner ──────────────────────────────────────
+  registry:
+    build:
+      context: .
+      dockerfile: docker/registry/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Shared data volume (DB + poller state) — also mounted by poller
+      - ztp-data:/data
+      # Source CSVs — hot-reload on change without restart
+      - ./model-sn.csv:/app/model-sn.csv
+      - ./model-loc.csv:/app/model-loc.csv
+      # Ansible installation on the host
+      - ${ANSIBLE_DIR}:/opt/ansible
+      - ${VAULT_PASS_FILE}:/root/.ansible/vault_pass.txt:ro
+    environment:
+      - DB_PATH=/data/devices.db
+      - POLLER_STATE_PATH=/data/.poller_state.json
+      - LOOKUP_CSV_PATH=/app/model-sn.csv
+      - SLOT_LOC_CSV_PATH=/app/model-loc.csv
+    env_file:
+      - .env
+    networks:
+      - ztp-net
+
+  # ── OpenGear console poller ───────────────────────────────────────────────────
+  poller:
+    build:
+      context: .
+      dockerfile: docker/poller/Dockerfile
+    restart: unless-stopped
+    volumes:
+      # Shared with registry — both read/write .poller_state.json
+      - ztp-data:/data
+    environment:
+      - POLLER_STATE_PATH=/data/.poller_state.json
+      - SERVER_URL=http://registry:5000
+    env_file:
+      - .env
+    depends_on:
+      - registry
+    networks:
+      - ztp-net
+
+  # ── nginx: serves ztp.py, config.json, IOS images on port 80 ─────────────────
+  web:
+    build:
+      context: docker/web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # ztp.py template — entrypoint substitutes ZTP_SERVER_IP/ZTP_WEB_PORT
+      # and writes the result to /var/cache/ztp/ztp.py (served via nginx alias)
+      - ./ztp.py:/etc/nginx/ztp.py.tpl:ro
+      - ./config.json:/usr/share/nginx/html/config.json:ro
+      # IOS image directory — set IOS_IMAGES_DIR in .env
+      # Images must be at the document root: http://<server>/<image>.bin
+      - ${IOS_IMAGES_DIR:-/var/www/ztp}:/usr/share/nginx/html:ro
+    env_file:
+      - .env
+    networks:
+      - ztp-net
+
+  # ── dnsmasq DHCP server ───────────────────────────────────────────────────────
+  # Must use host networking — DHCP packets travel at L2 and cannot cross
+  # a Docker bridge. Set DHCP_INTERFACE in .env to the physical NIC name
+  # (e.g. eth0, ens3, bond0) that is on the switch management VLAN.
+  dhcp:
+    build:
+      context: docker/dhcp
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    env_file:
+      - .env
+
+# ── Volumes ────────────────────────────────────────────────────────────────────
+volumes:
+  # Shared between registry and poller
+  ztp-data:
+
+# ── Internal network ───────────────────────────────────────────────────────────
+networks:
+  ztp-net:
+    driver: bridge

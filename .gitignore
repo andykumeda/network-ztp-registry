@@ -1,0 +1,11 @@
+*.bin
+config.json
+ztp.py-min
+devices.db
+.venv/
+.poller_state.json
+ztp_server.db
+__pycache__/
+.env
+ansible/.vault_pass.txt
+.worktrees/

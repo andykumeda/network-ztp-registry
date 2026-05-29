@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network ZTP Registry</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:      #2563eb;
+      --primary-dark: #1d4ed8;
+      --success:      #16a34a;
+      --warning:      #d97706;
+      --danger:       #dc2626;
+      --info:         #0891b2;
+      --bg:           #f1f5f9;
+      --surface:      #ffffff;
+      --border:       #e2e8f0;
+      --text:         #1e293b;
+      --muted:        #64748b;
+      --header-bg:    #0f172a;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── Header ─────────────────────────────────── */
+    header { background: var(--header-bg); color: #fff; padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+    header h1 { font-size: 1.0625rem; font-weight: 600; letter-spacing: 0.02em; }
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+    #conn-indicator { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; flex-shrink: 0; transition: background 0.3s; }
+    #conn-indicator.disconnected { background: #f87171; }
+    header span.ts { font-size: 0.75rem; color: #94a3b8; }
+
+    /* ── Layout ──────────────────────────────────── */
+    main { max-width: 1600px; margin: 0 auto; padding: 2rem; }
+
+    /* ── Live sessions panel ─────────────────────── */
+    #live-panel  { margin-bottom: 1.5rem; display: none; }
+    #failed-panel { margin-bottom: 1.5rem; display: none; }
+    #live-panel h2, #failed-panel h2 { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.75rem; }
+    .live-cards { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .live-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.875rem 1.125rem; min-width: 260px; max-width: 340px; flex: 1; }
+    .live-card.provisioning { border-left: 3px solid var(--warning); }
+    .live-card.upgrading    { border-left: 3px solid var(--info); }
+    .live-card .lc-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .live-card .lc-progress { font-size: 0.875rem; margin-top: 0.375rem; color: var(--text); }
+    .live-card .lc-badge { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; margin-top: 0.5rem; }
+    .live-card.provisioning .lc-badge { color: var(--warning); }
+    .live-card.upgrading    .lc-badge { color: var(--info); }
+    .spinner { width: 10px; height: 10px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Stats ───────────────────────────────────── */
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; }
+    .stat-card .label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.5rem; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; }
+    .stat-card.pending .value { color: var(--warning); }
+    .stat-card.complete .value { color: var(--success); }
+
+    /* ── Controls bar ────────────────────────────── */
+    .controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
+    .search-wrap { position: relative; flex: 1; max-width: 360px; }
+    .search-wrap svg { position: absolute; left: 0.625rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .search-wrap input { width: 100%; padding: 0.5rem 0.75rem 0.5rem 2.125rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.875rem; background: var(--surface); color: var(--text); outline: none; }
+    .search-wrap input:focus { border-color: var(--primary); }
+    .btn-group { display: flex; gap: 0.5rem; }
+
+    button { cursor: pointer; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; padding: 0.5rem 1rem; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+    .btn-primary   { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--bg); }
+    .btn-danger    { background: #fee2e2; color: var(--danger); border: 1px solid #fecaca; }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-ghost     { background: none; color: var(--muted); border: 1px solid transparent; padding: 0.3rem 0.5rem; font-size: 0.8125rem; }
+    .btn-ghost:hover { background: #f1f5f9; color: var(--text); border-color: var(--border); }
+    .btn-sm        { padding: 0.375rem 0.625rem; font-size: 0.8125rem; }
+
+    /* ── Table ───────────────────────────────────── */
+    .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; overflow-y: visible; }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th { background: #f8fafc; padding: 0.75rem 1rem; text-align: left; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 0.875rem 1rem; font-size: 0.875rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { cursor: pointer; transition: background 0.1s; }
+    tbody tr:hover td { background: #eff6ff; }
+
+    .mono { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace; font-size: 0.8125rem; }
+    .dim  { color: var(--muted); }
+    .note-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.8125rem; }
+
+    /* ── Badges ──────────────────────────────────── */
+    .badge { display: inline-block; padding: 0.2rem 0.625rem; border-radius: 9999px; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .badge-complete { background: #dcfce7; color: #15803d; }
+    .badge-pending  { background: #fef3c7; color: #92400e; }
+
+    /* ── Empty state ─────────────────────────────── */
+    .empty { padding: 4rem 2rem; text-align: center; color: var(--muted); }
+    .empty p { margin-top: 0.5rem; font-size: 0.875rem; }
+
+    /* ── Modal ───────────────────────────────────── */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--surface); border-radius: 12px; width: 100%; max-width: 600px; max-height: 92vh; overflow-y: auto; box-shadow: 0 24px 64px rgba(0,0,0,0.22); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+    .modal-header h2 { font-size: 1rem; font-weight: 600; }
+    .btn-close { background: none; border: none; font-size: 1.125rem; line-height: 1; color: var(--muted); padding: 0.25rem 0.375rem; border-radius: 4px; }
+    .btn-close:hover { background: var(--bg); color: var(--text); }
+    .modal-body { padding: 1.5rem; }
+
+    .section-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.875rem; }
+    .readonly-block { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 0.25rem 1rem; margin-bottom: 1.5rem; }
+    .info-row { display: grid; grid-template-columns: 130px 1fr; gap: 0.5rem; padding: 0.625rem 0; border-bottom: 1px solid var(--border); }
+    .info-row:last-child { border-bottom: none; }
+    .info-key { font-size: 0.75rem; color: var(--muted); font-weight: 500; align-self: center; }
+    .info-val { font-size: 0.8125rem; font-family: 'SF Mono', Consolas, monospace; word-break: break-all; }
+
+    .hw-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; margin-bottom: 1.5rem; }
+    .hw-table th { background: #f1f5f9; font-size: 0.6875rem; padding: 0.5rem 0.75rem; text-align: left; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .hw-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); font-family: 'SF Mono', Consolas, monospace; }
+    .hw-table tr:last-child td { border-bottom: none; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.375rem; }
+    .form-group.full { grid-column: 1 / -1; }
+    label { font-size: 0.8125rem; font-weight: 500; }
+    input[type="text"], textarea { padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.875rem; color: var(--text); outline: none; width: 100%; background: var(--surface); font-family: inherit; }
+    textarea { resize: vertical; min-height: 72px; }
+    input[type="text"]:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+    .modal-footer { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: var(--surface); }
+    .modal-footer .right { display: flex; gap: 0.5rem; }
+
+    /* ── Ansible modal ──────────────────────────────────────────────────────── */
+    #ansible-overlay .modal { max-width: 780px; }
+    .ansible-target { background: #f1f5f9; border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.5rem 0.875rem; margin-bottom: 1.25rem; font-size: 0.875rem; display: flex;
+      align-items: center; gap: 0.75rem; }
+    .ansible-target .tgt-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); flex-shrink: 0; }
+    .ansible-target .tgt-host  { font-family: 'SF Mono', Consolas, monospace; font-weight: 600; }
+    .ansible-target .tgt-ip    { color: var(--muted); font-family: 'SF Mono', Consolas, monospace;
+      font-size: 0.8125rem; }
+    .playbook-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .playbook-row select { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.875rem; background: var(--surface); color: var(--text);
+      outline: none; }
+    .playbook-row select:focus { border-color: var(--primary); }
+    #ansible-playbook { font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+      font-size: 0.8125rem; min-height: 200px; resize: vertical; }
+    .console-wrap { display: none; margin-top: 1.25rem; }
+    .console-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.5rem; }
+    .console-output { background: #0f172a; color: #cbd5e1; font-family: 'SF Mono',
+      'Cascadia Code', Consolas, monospace; font-size: 0.8125rem; line-height: 1.55;
+      padding: 0.875rem 1rem; border-radius: 8px; height: 300px; overflow-y: auto;
+      white-space: pre-wrap; word-break: break-all; }
+    /* Ansible output colorization */
+    .al-play   { color: #60a5fa; font-weight: 600; }
+    .al-task   { color: #a78bfa; }
+    .al-ok     { color: #4ade80; }
+    .al-changed{ color: #fb923c; }
+    .al-fatal  { color: #f87171; }
+    .al-skip   { color: #64748b; }
+    .al-recap  { color: #fbbf24; font-weight: 700; }
+    .al-recap-ok   { color: #4ade80; }
+    .al-recap-fail { color: #f87171; }
+    .run-status { display: none; margin-top: 0.75rem; padding: 0.625rem 1rem;
+      border-radius: 6px; font-size: 0.875rem; font-weight: 600; }
+    .run-status.success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .run-status.failure { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .run-status.running { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+    /* ── Configure Device variable form ─────────── */
+    #cd-vars-section { display: none; margin-bottom: 1.25rem; }
+    #cd-vars-section .section-label { margin-bottom: 0.5rem; }
+    .cd-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem 1rem; margin-bottom: 0.75rem; }
+    .cd-grid .form-group.span2 { grid-column: span 2; }
+    .cd-warning { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px;
+      padding: 0.5rem 0.875rem; font-size: 0.8125rem; color: #92400e; margin-top: 0.25rem; }
+
+    /* ── Print label ─────────────────────────────── */
+    @media print {
+      body > *:not(#print-label) { display: none !important; }
+      #print-label { display: block !important; }
+    }
+    #print-label { display: none; }
+
+    /* ── Responsive ──────────────────────────────── */
+    @media (max-width: 700px) { main { padding: 1rem; } .stats { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Network ZTP Registry</h1>
+  <div class="header-right">
+    <div id="conn-indicator" title="Live connection"></div>
+    <span class="ts" id="last-refresh">—</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Active provisioning panel -->
+  <div id="live-panel">
+    <h2>⚡ Live Provisioning Sessions</h2>
+    <div class="live-cards" id="live-cards"></div>
+  </div>
+
+  <!-- Failed sessions panel -->
+  <div id="failed-panel" style="display:none">
+    <h2>&#9888; Failed Sessions</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Port</th>
+            <th>Model</th>
+            <th>Serial</th>
+            <th>Failure Reason</th>
+            <th>Notes</th>
+            <th>Timestamp</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="failed-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="label">Total Devices</div>
+      <div class="value" id="stat-total">—</div>
+    </div>
+    <div class="stat-card pending">
+      <div class="label">Pending</div>
+      <div class="value" id="stat-pending">—</div>
+    </div>
+    <div class="stat-card complete">
+      <div class="label">Complete</div>
+      <div class="value" id="stat-complete">—</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="search" placeholder="Filter by hostname, serial, IP, building…">
+    </div>
+    <div class="btn-group">
+      <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
+      <button class="btn-primary" onclick="openModal(null)">+ Add Device</button>
+    </div>
+  </div>
+
+  <!-- Device table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Hostname</th>
+          <th>Model</th>
+          <th>Serial</th>
+          <th>IP Address</th>
+          <th>Modules</th>
+          <th>PSU</th>
+          <th>Building</th>
+          <th>Fl</th>
+          <th>Room</th>
+          <th>Asset Tag</th>
+          <th>Notes</th>
+          <th>Status</th>
+          <th>Provisioned</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="device-tbody"></tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Device detail / edit modal -->
+<div class="overlay" id="overlay" onclick="backdropClose(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Device Details</h2>
+      <button class="btn-close" onclick="closeModal()" title="Close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- ZTP-populated fields (read-only when editing) -->
+      <div id="section-readonly">
+        <div class="section-label">ZTP Provisioned Info</div>
+        <div class="readonly-block" id="readonly-fields"></div>
+        <div id="section-hw"></div>
+      </div>
+
+      <!-- Manual entry fields (only shown when adding) -->
+      <div id="section-add-fields" style="display:none; margin-bottom:1.5rem;">
+        <div class="section-label">Device Info</div>
+        <div class="form-grid">
+          <div class="form-group full"><label for="f-hostname">Hostname</label><input type="text" id="f-hostname" placeholder="e.g. 9606-ZTP-101"></div>
+          <div class="form-group"><label for="f-model">Model</label><input type="text" id="f-model" placeholder="e.g. C9300X-48HX"></div>
+          <div class="form-group"><label for="f-serial">Serial Number</label><input type="text" id="f-serial" placeholder="e.g. DEMO9300X001"></div>
+          <div class="form-group full"><label for="f-ip">IP Address</label><input type="text" id="f-ip" placeholder="e.g. 10.0.0.101"></div>
+        </div>
+      </div>
+
+      <!-- Location & asset (always editable) -->
+      <div class="section-label">Location &amp; Asset Info <span style="font-weight:400;font-size:0.75rem;color:var(--muted)">(building &amp; room auto-populated)</span></div>
+      <div class="form-grid" style="margin-bottom:1.5rem;">
+        <div class="form-group full"><label for="f-building">Building</label><input type="text" id="f-building" placeholder="Auto-populated from registry"></div>
+        <div class="form-group"><label for="f-floor">Floor</label><input type="text" id="f-floor" placeholder="e.g. 3"></div>
+        <div class="form-group"><label for="f-room">Room</label><input type="text" id="f-room" placeholder="Auto-populated from registry"></div>
+        <div class="form-group full"><label for="f-module">Module Config</label><input type="text" id="f-module" placeholder="Auto-populated from registry"></div>
+        <div class="form-group full"><label for="f-asset">Asset Tag</label><input type="text" id="f-asset" placeholder="e.g. ASSET-0001"></div>
+      </div>
+
+      <!-- Notes -->
+      <div class="section-label">Notes</div>
+      <div class="form-grid">
+        <div class="form-group full"><label for="f-notes">Notes</label><textarea id="f-notes" placeholder="Any relevant notes…"></textarea></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-danger btn-sm" id="btn-delete" onclick="deleteDevice()">Delete</button>
+      <div class="right">
+        <button class="btn-secondary" id="btn-print-modal" onclick="printCurrentLabel()" style="display:none">🖨 Print Label</button>
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveDevice()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Ansible playbook modal -->
+<div class="overlay" id="ansible-overlay" onclick="ansibleBackdropClose(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Run Ansible Playbook</h2>
+      <button class="btn-close" onclick="closeAnsibleModal()" title="Close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Target device info -->
+      <div class="ansible-target">
+        <span class="tgt-label">Target</span>
+        <span class="tgt-host" id="ansible-hostname">—</span>
+        <span class="tgt-ip" id="ansible-ip"></span>
+      </div>
+
+      <!-- Playbook selector -->
+      <div class="section-label">Playbook</div>
+      <div class="playbook-row">
+        <select id="ansible-select" onchange="loadPlaybook()">
+          <option value="">— Select existing playbook —</option>
+        </select>
+        <button class="btn-secondary btn-sm" onclick="loadPlaybooks()">↺ Refresh</button>
+      </div>
+
+      <!-- Configure Device variable inputs (shown only for configure_device.yml) -->
+      <div id="cd-vars-section">
+        <div class="section-label">Device Configuration Variables
+          <span style="font-weight:400;font-size:0.75rem;color:var(--muted)">(only filled fields will be applied)</span>
+        </div>
+        <div class="cd-grid">
+          <div class="form-group span2">
+            <label for="cd-hostname">Hostname</label>
+            <input type="text" id="cd-hostname" placeholder="e.g. sw-core-01">
+          </div>
+          <div class="form-group">
+            <label for="cd-domain">Domain Name</label>
+            <input type="text" id="cd-domain" placeholder="e.g. example.com">
+          </div>
+          <div class="form-group">
+            <label for="cd-dns1">DNS Server 1</label>
+            <input type="text" id="cd-dns1" placeholder="e.g. 8.8.8.8">
+          </div>
+          <div class="form-group">
+            <label for="cd-dns2">DNS Server 2</label>
+            <input type="text" id="cd-dns2" placeholder="e.g. 8.8.4.4">
+          </div>
+          <div class="form-group">
+            <label for="cd-ntp">NTP Server</label>
+            <input type="text" id="cd-ntp" placeholder="e.g. 10.0.0.1">
+          </div>
+          <div class="form-group">
+            <label for="cd-syslog">Syslog Server</label>
+            <input type="text" id="cd-syslog" placeholder="e.g. 10.0.0.14">
+          </div>
+          <div class="form-group">
+            <label for="cd-mgmt-ip">Mgmt IP</label>
+            <input type="text" id="cd-mgmt-ip" placeholder="e.g. 10.1.0.5">
+          </div>
+          <div class="form-group">
+            <label for="cd-mgmt-mask">Subnet Mask</label>
+            <input type="text" id="cd-mgmt-mask" placeholder="e.g. 255.255.255.0">
+          </div>
+          <div class="form-group">
+            <label for="cd-mgmt-int">Interface</label>
+            <input type="text" id="cd-mgmt-int" placeholder="e.g. GigabitEthernet0/0">
+          </div>
+          <div class="form-group">
+            <label for="cd-gw">Default Gateway</label>
+            <input type="text" id="cd-gw" placeholder="e.g. 10.1.0.1">
+          </div>
+        </div>
+        <div class="cd-warning">
+          Warning: IP address and gateway changes are applied immediately and may interrupt connectivity to this device.
+        </div>
+      </div>
+
+      <!-- Editable playbook textarea -->
+      <div class="form-group">
+        <textarea id="ansible-playbook" placeholder="Paste or edit a playbook here, or select one above…"></textarea>
+      </div>
+
+      <!-- Live output console (shown after Run is clicked) -->
+      <div class="console-wrap" id="ansible-console-wrap">
+        <div class="console-label">Output</div>
+        <div class="console-output" id="ansible-console"></div>
+        <div class="run-status" id="ansible-status"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary btn-sm" onclick="clearAnsibleConsole()">Clear Output</button>
+      <div class="right">
+        <button class="btn-secondary" onclick="closeAnsibleModal()">Close</button>
+        <button class="btn-primary" id="ansible-run-btn" onclick="runAnsible()">▶ Run</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden print label (shown only during window.print()) -->
+<div id="print-label"></div>
+
+<script>
+  let devices = [];
+  let currentId = null;
+
+  const isComplete = d => !!(d.building && d.room && d.asset_tag);
+
+  // ── Date formatting ─────────────────────────────
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})
+      + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+
+  function cell(val, cls) {
+    const v = val || '<span class="dim">—</span>';
+    return `<td${cls ? ` class="${cls}"` : ''}>${v}</td>`;
+  }
+
+  // ── Hardware inventory ──────────────────────────
+  function renderHwInventory(jsonStr) {
+    if (!jsonStr) return '';
+    let items;
+    try { items = JSON.parse(jsonStr); } catch { return ''; }
+    if (!items || !items.length) return '';
+    const rows = items.map(item => {
+      const slot = item.slot !== undefined ? `<span class="dim" style="margin-right:.4em">Slot ${item.slot}</span>` : '';
+      return `<tr>
+        <td>${slot}${item.pid || '—'}</td>
+        <td>${item.sn || '—'}</td>
+        <td class="dim" style="font-size:.75rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(item.name||'').replace(/"/g,'&quot;')}">${item.name||''}</td>
+      </tr>`;
+    }).join('');
+    return `
+      <div class="section-label" style="margin-top:1rem">Hardware</div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:1.5rem;">
+        <table class="hw-table"><thead><tr><th>PID</th><th>Serial</th><th>Description</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>`;
+  }
+
+  // ── Hardware counts for table column ─────
+  function hwCounts(jsonStr) {
+    if (!jsonStr) return {modules: 0, psu: 0};
+    let items;
+    try { items = JSON.parse(jsonStr); } catch { return {modules: 0, psu: 0}; }
+    if (!items || !items.length) return {modules: 0, psu: 0};
+    const isPsu = i => /pwr|psu/i.test(i.pid) || /power supply/i.test(i.name);
+    const modules = items.filter(i => !isPsu(i) && (
+      (/sup/i.test(i.pid) || /sup/i.test(i.name)) ||
+      (/LC-|linecard/i.test(i.pid) || /linecard/i.test(i.name)) ||
+      /NM-/i.test(i.pid)
+    )).length;
+    const psu = items.filter(isPsu).length;
+    return {modules, psu};
+  }
+
+  // ── Render devices table ────────────────────────
+  function renderTable() {
+    const q = document.getElementById('search').value.toLowerCase();
+    const tbody = document.getElementById('device-tbody');
+    const list = q
+      ? devices.filter(d =>
+          [d.hostname, d.model, d.serial, d.ip_address,
+           d.building, d.floor, d.room, d.asset_tag, d.notes]
+            .some(v => v && v.toLowerCase().includes(q)))
+      : devices;
+
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="14"><div class="empty">
+        <strong>No devices found</strong>
+        <p>${q ? 'Try a different search term.' : 'Devices appear here automatically after ZTP provisioning.'}</p>
+      </div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list.map(d => {
+      const badge = isComplete(d)
+        ? '<span class="badge badge-complete">Complete</span>'
+        : '<span class="badge badge-pending">Pending</span>';
+      const noteTrunc = d.notes
+        ? `<span title="${d.notes.replace(/"/g,'&quot;')}">${d.notes.length > 40 ? d.notes.slice(0,40)+'…' : d.notes}</span>`
+        : '<span class="dim">—</span>';
+      const hw = hwCounts(d.hw_inventory);
+      return `<tr onclick="openModal(${d.id})">
+        ${cell(d.hostname, 'mono')}
+        ${cell(d.model, 'mono')}
+        ${cell(d.serial, 'mono')}
+        ${cell(d.ip_address, 'mono')}
+        <td style="text-align:center">${hw.modules}</td>
+        <td style="text-align:center">${hw.psu}</td>
+        ${cell(d.building)}
+        ${cell(d.floor)}
+        ${cell(d.room)}
+        ${cell(d.asset_tag, 'mono')}
+        <td class="note-cell">${noteTrunc}</td>
+        <td>${badge}</td>
+        <td class="dim" style="font-size:.75rem;white-space:nowrap">${fmtDate(d.provisioned_at)}</td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          <button class="btn-ghost btn-sm" onclick="printLabel(${d.id})" title="Print label">🖨</button>
+          <button class="btn-ghost btn-sm" onclick="openAnsibleModal(${d.id})" title="Run Ansible playbook" style="color:var(--info)">⚙ Ansible</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function updateStats() {
+    const total = devices.length;
+    const complete = devices.filter(isComplete).length;
+    document.getElementById('stat-total').textContent    = total;
+    document.getElementById('stat-pending').textContent  = total - complete;
+    document.getElementById('stat-complete').textContent = complete;
+  }
+
+  // ── Live sessions panel (active provisioning only) ─────────
+  function renderLiveSessions(sessions) {
+    const livePanel = document.getElementById('live-panel');
+    const liveCards = document.getElementById('live-cards');
+    const active = (sessions || []).filter(s => s.status !== 'failed');
+    if (active.length) {
+      livePanel.style.display = 'block';
+      liveCards.innerHTML = active.map(s => {
+        const badge = s.status === 'upgrading'
+          ? `<div class="lc-badge"><span class="spinner"></span>Upgrading IOS</div>`
+          : `<div class="lc-badge"><span class="spinner"></span>Provisioning</div>`;
+        return `<div class="live-card ${s.status}">
+          <div class="lc-label">${s.port_label}</div>
+          <div class="lc-progress">${s.progress || 'Starting...'}</div>
+          ${badge}
+        </div>`;
+      }).join('');
+    } else {
+      livePanel.style.display = 'none';
+    }
+  }
+
+  // ── Failed devices table (persisted in DB) ────────────────
+  function renderFailedDevices(failedDevices) {
+    const panel = document.getElementById('failed-panel');
+    const tbody = document.getElementById('failed-tbody');
+    if (!failedDevices || !failedDevices.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    tbody.innerHTML = failedDevices.map(d => `<tr>
+      <td>${d.port_label || '<span class="dim">-</span>'}</td>
+      <td class="mono">${d.model || '<span class="dim">-</span>'}</td>
+      <td class="mono">${d.serial || '<span class="dim">-</span>'}</td>
+      <td style="max-width:300px;font-size:.8125rem;word-break:break-word">${d.failure_reason || '<span class="dim">-</span>'}</td>
+      <td><input type="text" value="${(d.notes||'').replace(/"/g,'&quot;')}"
+           onchange="updateFailedNote(${d.id}, this.value)" placeholder="Add notes..."
+           style="border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:.8125rem;width:140px"></td>
+      <td class="dim" style="font-size:.75rem;white-space:nowrap">${fmtDate(d.provisioned_at)}</td>
+      <td><button class="btn-danger btn-sm" onclick="deleteFailedDevice(${d.id})">Delete</button></td>
+    </tr>`).join('');
+  }
+
+  async function updateFailedNote(id, notes) {
+    await fetch('/api/devices/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({notes}),
+    });
+  }
+
+  async function deleteFailedDevice(id) {
+    await fetch('/api/devices/' + id, {method: 'DELETE'});
+    fetchDevices();
+  }
+
+  // ── Fetch ───────────────────────────────────────
+  async function fetchDevices() {
+    try {
+      const [devRes, sesRes, failRes] = await Promise.all([
+        fetch('/api/devices'),
+        fetch('/api/live-sessions'),
+        fetch('/api/devices/failed'),
+      ]);
+      devices = await devRes.json();
+      const sessions = await sesRes.json();
+      const failedDevices = await failRes.json();
+      updateStats();
+      renderTable();
+      renderLiveSessions(sessions);
+      renderFailedDevices(failedDevices);
+      document.getElementById('last-refresh').textContent =
+        'Updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    } catch (e) {
+      console.error('Fetch error:', e);
+    }
+  }
+
+  // ── SSE — real-time push ────────────────────────
+  function connectSSE() {
+    const indicator = document.getElementById('conn-indicator');
+    const es = new EventSource('/api/stream');
+
+    es.onmessage = (e) => {
+      if (e.data === 'update') fetchDevices();
+    };
+
+    es.onopen = () => indicator.classList.remove('disconnected');
+
+    es.onerror = () => {
+      indicator.classList.add('disconnected');
+      // Browser auto-reconnects EventSource; no manual retry needed
+    };
+  }
+
+  // ── Modal ───────────────────────────────────────
+  function openModal(id) {
+    currentId = id;
+    const isAdd = id === null;
+    document.getElementById('modal-title').textContent       = isAdd ? 'Add Device' : 'Device Details';
+    document.getElementById('section-readonly').style.display   = isAdd ? 'none' : 'block';
+    document.getElementById('section-add-fields').style.display = isAdd ? 'block' : 'none';
+    document.getElementById('btn-delete').style.display         = isAdd ? 'none' : 'inline-block';
+    document.getElementById('btn-print-modal').style.display    = isAdd ? 'none' : 'inline-block';
+
+    if (isAdd) {
+      ['f-hostname','f-model','f-serial','f-ip','f-building','f-floor','f-room','f-asset','f-module']
+        .forEach(i => document.getElementById(i).value = '');
+      document.getElementById('f-notes').value = '';
+    } else {
+      const d = devices.find(x => x.id === id);
+      if (!d) return;
+      document.getElementById('readonly-fields').innerHTML = [
+        ['Hostname',    d.hostname],
+        ['Model',       d.model],
+        ['Serial',      d.serial],
+        ['IP Address',  d.ip_address],
+        ['IOS Version', d.ios_version],
+        ['Module Config', d.module],
+        ['Provisioned', fmtDate(d.provisioned_at)],
+      ].map(([k, v]) => `<div class="info-row">
+        <span class="info-key">${k}</span>
+        <span class="info-val">${v || '<span style="color:var(--muted)">—</span>'}</span>
+      </div>`).join('');
+      document.getElementById('section-hw').innerHTML = renderHwInventory(d.hw_inventory);
+      document.getElementById('f-building').value = d.building  || '';
+      document.getElementById('f-floor').value    = d.floor     || '';
+      document.getElementById('f-room').value     = d.room      || '';
+      document.getElementById('f-asset').value    = d.asset_tag || '';
+      document.getElementById('f-notes').value    = d.notes     || '';
+      document.getElementById('f-module').value   = d.module    || '';
+    }
+    document.getElementById('overlay').classList.add('open');
+    setTimeout(() => document.getElementById('f-asset').focus(), 50);
+  }
+
+  function closeModal() {
+    document.getElementById('overlay').classList.remove('open');
+    currentId = null;
+  }
+
+  function backdropClose(e) {
+    if (e.target === document.getElementById('overlay')) closeModal();
+  }
+
+  // ── Save ────────────────────────────────────────
+  async function saveDevice() {
+    const isAdd = currentId === null;
+    const body = isAdd
+      ? { hostname: document.getElementById('f-hostname').value.trim(),
+          model:    document.getElementById('f-model').value.trim(),
+          serial:   document.getElementById('f-serial').value.trim(),
+          ip_address: document.getElementById('f-ip').value.trim(),
+          building: document.getElementById('f-building').value.trim(),
+          floor:    document.getElementById('f-floor').value.trim(),
+          room:     document.getElementById('f-room').value.trim(),
+          module:   document.getElementById('f-module').value.trim(),
+          asset_tag:document.getElementById('f-asset').value.trim(),
+          notes:    document.getElementById('f-notes').value.trim() }
+      : { building: document.getElementById('f-building').value.trim(),
+          floor:    document.getElementById('f-floor').value.trim(),
+          room:     document.getElementById('f-room').value.trim(),
+          module:   document.getElementById('f-module').value.trim(),
+          asset_tag:document.getElementById('f-asset').value.trim(),
+          notes:    document.getElementById('f-notes').value.trim() };
+    try {
+      const r = await fetch(isAdd ? '/api/devices' : `/api/devices/${currentId}`, {
+        method: isAdd ? 'POST' : 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (r.ok) { closeModal(); await fetchDevices(); }
+    } catch (e) { console.error('Save error:', e); }
+  }
+
+  // ── Delete ──────────────────────────────────────
+  async function deleteDevice() {
+    if (!currentId || !confirm('Delete this device record? This cannot be undone.')) return;
+    try {
+      await fetch(`/api/devices/${currentId}`, {method: 'DELETE'});
+      closeModal();
+      await fetchDevices();
+    } catch (e) { console.error('Delete error:', e); }
+  }
+
+  // ── Print label ─────────────────────────────────
+  function buildLabelHTML(d) {
+    const row = (label, val) => val
+      ? `<tr><td style="font-weight:600;color:#555;padding:3pt 0;vertical-align:top;white-space:nowrap;padding-right:10pt">${label}</td><td style="padding:3pt 0;font-family:monospace">${val}</td></tr>`
+      : '';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  @page { size: 4in 6in; margin: 0.3in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; width: 3.4in; }
+  .hdr { font-size: 7pt; color: #888; border-bottom: 1pt solid #ddd; padding-bottom: 5pt; margin-bottom: 8pt; letter-spacing: .04em; text-transform: uppercase; }
+  .hostname { font-size: 20pt; font-weight: 700; line-height: 1.1; margin-bottom: 2pt; }
+  .model    { font-size: 11pt; color: #444; margin-bottom: 8pt; }
+  .section  { border-top: 1pt solid #eee; margin-top: 8pt; padding-top: 6pt; }
+  table { width: 100%; font-size: 9pt; border-collapse: collapse; }
+  .footer   { margin-top: 8pt; padding-top: 6pt; border-top: 1pt solid #eee; font-size: 7.5pt; color: #aaa; }
+</style></head><body>
+<div class="hdr">Network ZTP Registry</div>
+<div class="hostname">${d.hostname || '—'}</div>
+<div class="model">${d.model || '—'}</div>
+<div class="section"><table>
+  ${row('Serial', d.serial)}
+  ${row('IP Address', d.ip_address)}
+  ${row('IOS Version', d.ios_version)}
+</table></div>
+<div class="section"><table>
+  ${row('Building', d.building)}
+  ${row('Floor', d.floor)}
+  ${row('Room', d.room)}
+  ${row('Asset Tag', d.asset_tag)}
+</table></div>
+${d.notes ? `<div class="section" style="font-size:8.5pt;color:#555">${d.notes}</div>` : ''}
+<div class="footer">Staged: ${fmtDate(d.provisioned_at)}</div>
+</body></html>`;
+  }
+
+  function printLabel(id) {
+    const d = devices.find(x => x.id === id);
+    if (!d) return;
+    const win = window.open('', '_blank', 'width=500,height=700');
+    win.document.write(buildLabelHTML(d));
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  }
+
+  function printCurrentLabel() {
+    if (currentId) printLabel(currentId);
+  }
+
+  // ── CSV Export ──────────────────────────────────
+  function hwColumns(jsonStr) {
+    const empty = {chassis:'', supervisor:'', line_cards:'', network_modules:'', psus:''};
+    if (!jsonStr) return empty;
+    let items;
+    try { items = JSON.parse(jsonStr); } catch { return empty; }
+    if (!items || !items.length) return empty;
+    const fmt = i => i.sn ? `${i.pid} (${i.sn})` : i.pid;
+    const isPsu  = i => /pwr|psu/i.test(i.pid) || /power supply/i.test(i.name);
+    const isSup  = i => /sup/i.test(i.pid) || /sup/i.test(i.name);
+    const isLC   = i => /LC-|linecard/i.test(i.pid) || /linecard/i.test(i.name);
+    const isNM   = i => /NM-/i.test(i.pid);
+    return {
+      chassis:         items.filter(i => !isPsu(i) && !isSup(i) && !isLC(i) && !isNM(i)).map(fmt).join('; '),
+      supervisor:      items.filter(i => !isPsu(i) && isSup(i)).map(fmt).join('; '),
+      line_cards:      items.filter(i => isLC(i)).map(fmt).join('; '),
+      network_modules: items.filter(i => isNM(i)).map(fmt).join('; '),
+      psus:            items.filter(isPsu).map(fmt).join('; '),
+    };
+  }
+
+  function exportCSV() {
+    const fixedCols = ['id','hostname','model','serial','ip_address','ios_version',
+                       'building','floor','room','asset_tag','notes',
+                       'provisioned_at','updated_at'];
+    const hwCols = ['chassis','supervisor','line_cards','network_modules','psus'];
+    const headers = [...fixedCols, ...hwCols];
+    const escape = v => `"${(v ?? '').toString().replace(/"/g,'""')}"`;
+    const rows = [
+      headers.join(','),
+      ...devices.map(d => {
+        const hw = hwColumns(d.hw_inventory);
+        return [...fixedCols.map(c => escape(d[c])), ...hwCols.map(c => escape(hw[c]))].join(',');
+      }),
+    ];
+    const blob = new Blob([rows.join('\n')], {type: 'text/csv'});
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: `mgn-staging-${new Date().toISOString().slice(0,10)}.csv`,
+    });
+    a.click();
+  }
+
+  // ── Ansible modal ───────────────────────────────
+  let ansibleDeviceId = null;
+  let ansibleRunning  = false;
+
+  function openAnsibleModal(id) {
+    ansibleDeviceId = id;
+    const d = devices.find(x => x.id === id);
+    if (!d) return;
+    document.getElementById('ansible-hostname').textContent = d.hostname || d.serial || '—';
+    document.getElementById('ansible-ip').textContent = d.ip_address ? `(${d.ip_address})` : '';
+    clearAnsibleConsole();
+    // Reset variable form so stale values from a previous device don't persist
+    ['cd-hostname','cd-domain','cd-dns1','cd-dns2','cd-ntp',
+     'cd-syslog','cd-mgmt-ip','cd-mgmt-mask','cd-mgmt-int','cd-gw']
+      .forEach(fid => { document.getElementById(fid).value = ''; });
+    document.getElementById('cd-vars-section').style.display = 'none';
+    loadPlaybooks();
+    document.getElementById('ansible-overlay').classList.add('open');
+  }
+
+  function closeAnsibleModal() {
+    if (ansibleRunning && !confirm('A playbook is still running. Close anyway?')) return;
+    document.getElementById('ansible-overlay').classList.remove('open');
+    ansibleDeviceId = null;
+  }
+
+  function ansibleBackdropClose(e) {
+    if (e.target === document.getElementById('ansible-overlay')) closeAnsibleModal();
+  }
+
+  function clearAnsibleConsole() {
+    document.getElementById('ansible-console').innerHTML = '';
+    document.getElementById('ansible-console-wrap').style.display = 'none';
+    document.getElementById('ansible-status').style.display = 'none';
+    document.getElementById('ansible-status').className = 'run-status';
+  }
+
+  async function loadPlaybooks() {
+    try {
+      const res = await fetch('/api/ansible/playbooks');
+      const files = await res.json();
+      const sel = document.getElementById('ansible-select');
+      const current = sel.value;
+      sel.innerHTML = '<option value="">— Select existing playbook —</option>'
+        + files.map(f => `<option value="${f}"${f === current ? ' selected' : ''}>${f}</option>`).join('');
+      await loadPlaybook();  // sync vars section with whatever is now selected
+    } catch (e) { console.error('loadPlaybooks:', e); }
+  }
+
+  async function loadPlaybook() {
+    const name = document.getElementById('ansible-select').value;
+    const varSection = document.getElementById('cd-vars-section');
+
+    if (name === 'configure_device.yml') {
+      varSection.style.display = 'block';
+      // Auto-populate hostname from the device record (don't overwrite if user already typed)
+      const d = devices.find(x => x.id === ansibleDeviceId);
+      if (d && d.hostname) {
+        const hostnameField = document.getElementById('cd-hostname');
+        if (!hostnameField.value) hostnameField.value = d.hostname;
+      }
+    } else {
+      varSection.style.display = 'none';
+    }
+
+    if (!name) return;
+    try {
+      const res = await fetch(`/api/ansible/playbooks/${encodeURIComponent(name)}`);
+      if (res.ok) document.getElementById('ansible-playbook').value = await res.text();
+    } catch (e) { console.error('loadPlaybook:', e); }
+  }
+
+  // Strip ANSI escape codes from a line of Ansible output.
+  function stripAnsi(s) { return s.replace(/\x1b\[[0-9;]*m/g, ''); }
+
+  // Escape HTML special chars.
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Apply colour classes to an Ansible output line.
+  function colorLine(raw) {
+    const s = stripAnsi(raw);
+    if (/^PLAY RECAP/.test(s))                              return `<span class="al-recap">${esc(s)}</span>`;
+    if (/^PLAY \[/.test(s))                                 return `<span class="al-play">${esc(s)}</span>`;
+    if (/^TASK \[/.test(s))                                 return `<span class="al-task">${esc(s)}</span>`;
+    if (/^fatal:|FAILED!/.test(s.trim()))                   return `<span class="al-fatal">${esc(s)}</span>`;
+    if (/^ok:/.test(s.trim()))                              return `<span class="al-ok">${esc(s)}</span>`;
+    if (/^changed:/.test(s.trim()))                         return `<span class="al-changed">${esc(s)}</span>`;
+    if (/^skipping:/.test(s.trim()))                        return `<span class="al-skip">${esc(s)}</span>`;
+    // PLAY RECAP host line: colour by success or failure
+    if (/ ok=\d/.test(s) && /failed=(\d+)/.test(s)) {
+      const failed      = parseInt(s.match(/failed=(\d+)/)?.[1]     ?? '0');
+      const unreachable = parseInt(s.match(/unreachable=(\d+)/)?.[1] ?? '0');
+      const cls = (failed || unreachable) ? 'al-recap-fail' : 'al-recap-ok';
+      return `<span class="${cls}">${esc(s)}</span>`;
+    }
+    return esc(s);
+  }
+
+  // Parse the PLAY RECAP block to determine overall success/failure.
+  function parseRecap(lines) {
+    let totalFailed = 0, totalUnreachable = 0, sawRecap = false;
+    for (const line of lines) {
+      const plain = stripAnsi(line);
+      if (/PLAY RECAP/.test(plain)) { sawRecap = true; continue; }
+      if (sawRecap && / ok=\d/.test(plain)) {
+        totalFailed      += parseInt(plain.match(/failed=(\d+)/)?.[1]      ?? '0');
+        totalUnreachable += parseInt(plain.match(/unreachable=(\d+)/)?.[1]  ?? '0');
+      }
+    }
+    return { sawRecap, failed: totalFailed, unreachable: totalUnreachable };
+  }
+
+  async function runAnsible() {
+    if (!ansibleDeviceId) return;
+    const playbook = document.getElementById('ansible-playbook').value.trim();
+    if (!playbook) { alert('Paste or select a playbook first.'); return; }
+    if (ansibleRunning) return;
+
+    ansibleRunning = true;
+    const runBtn = document.getElementById('ansible-run-btn');
+    runBtn.disabled = true;
+    runBtn.textContent = '⏳ Running…';
+
+    const consoleEl = document.getElementById('ansible-console');
+    const consoleWrap = document.getElementById('ansible-console-wrap');
+    const statusEl = document.getElementById('ansible-status');
+    consoleEl.innerHTML = '';
+    consoleWrap.style.display = 'block';
+    statusEl.style.display = 'block';
+    statusEl.className = 'run-status running';
+    statusEl.textContent = '⏳  Running playbook…';
+
+    const allLines = [];
+
+    // Collect extra vars from the configure_device form if it's visible
+    let extraVars = null;
+    const varSection = document.getElementById('cd-vars-section');
+    if (varSection.style.display !== 'none') {
+      const fields = {
+        hostname:        document.getElementById('cd-hostname').value.trim(),
+        domain_name:     document.getElementById('cd-domain').value.trim(),
+        dns_server1:     document.getElementById('cd-dns1').value.trim(),
+        dns_server2:     document.getElementById('cd-dns2').value.trim(),
+        ntp_server:      document.getElementById('cd-ntp').value.trim(),
+        syslog_server:   document.getElementById('cd-syslog').value.trim(),
+        mgmt_ip:         document.getElementById('cd-mgmt-ip').value.trim(),
+        mgmt_mask:       document.getElementById('cd-mgmt-mask').value.trim(),
+        mgmt_interface:  document.getElementById('cd-mgmt-int').value.trim(),
+        default_gateway: document.getElementById('cd-gw').value.trim(),
+      };
+      const filtered = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== ''));
+      if (Object.keys(filtered).length > 0) extraVars = filtered;
+    }
+
+    try {
+      const body = { device_id: ansibleDeviceId, playbook };
+      if (extraVars) body.vars = extraVars;
+      const res = await fetch('/api/ansible/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        statusEl.className = 'run-status failure';
+        statusEl.textContent = '✗  ' + (err.error || 'Failed to start run');
+        return;
+      }
+      const { run_id } = await res.json();
+
+      await new Promise((resolve) => {
+        const es = new EventSource(`/api/ansible/stream/${run_id}`);
+        es.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'line') {
+            allLines.push(msg.text);
+            consoleEl.innerHTML += colorLine(msg.text) + '\n';
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+          } else if (msg.type === 'done') {
+            es.close();
+            // Use rc for fast determination; also cross-check PLAY RECAP counts.
+            const recap = parseRecap(allLines);
+            const success = msg.success && recap.failed === 0 && recap.unreachable === 0;
+            statusEl.className = 'run-status ' + (success ? 'success' : 'failure');
+            if (success) {
+              statusEl.textContent = '✓  Playbook completed successfully';
+              // Sync registry fields that Ansible may have changed on the device
+              if (extraVars) {
+                const patch = {};
+                if (extraVars.hostname) patch.hostname = extraVars.hostname;
+                if (extraVars.mgmt_ip)  patch.ip_address = extraVars.mgmt_ip;
+                if (Object.keys(patch).length > 0) {
+                  fetch(`/api/devices/${ansibleDeviceId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(patch),
+                  }).catch(err => console.error('registry sync failed:', err));
+                }
+              }
+            } else {
+              const detail = recap.sawRecap
+                ? `failed=${recap.failed}, unreachable=${recap.unreachable}`
+                : `exit code ${msg.rc}`;
+              statusEl.textContent = `✗  Playbook finished with errors (${detail})`;
+            }
+            resolve();
+          }
+        };
+        es.onerror = () => {
+          es.close();
+          statusEl.className = 'run-status failure';
+          statusEl.textContent = '✗  Lost connection to run stream';
+          resolve();
+        };
+      });
+    } finally {
+      ansibleRunning = false;
+      runBtn.disabled = false;
+      runBtn.textContent = '▶ Run';
+    }
+  }
+
+  // ── Init ────────────────────────────────────────
+  document.getElementById('search').addEventListener('input', renderTable);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('ansible-overlay').classList.contains('open')) closeAnsibleModal();
+      else closeModal();
+    }
+  });
+
+  connectSSE();
+  fetchDevices();
+  // Fallback poll every 30s in case SSE misses anything
+  setInterval(fetchDevices, 30000);
+</script>
+</body>
+</html>

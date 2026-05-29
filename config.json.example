@@ -1,0 +1,12 @@
+{
+    "ios_image_name": "cat9k_iosxe.<VERSION>.SPA.bin",
+    "required_ios_version": "<VERSION_STRING>",
+    "ios_image_md5": "<IMAGE_MD5_HASH>",
+    "domain_name": "<YOUR_DOMAIN>",
+    "priv15_user": "<ADMIN_USERNAME>",
+    "priv15_user_secret": "<TYPE_9_OR_8_SECRET>",
+    "ansible_user": "<ANSIBLE_USERNAME>",
+    "ansible_user_secret": "<TYPE_9_OR_8_SECRET>",
+    "enable_secret": "<TYPE_9_OR_8_SECRET>",
+    "management_interface": "GigabitEthernet0/0"
+}
