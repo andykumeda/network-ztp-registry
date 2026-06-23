@@ -1,3 +1,63 @@
-[demo_switches]
-10.10.10.101
-10.10.10.102
+# Ansible Inventory Example
+# Copy this file to 'hosts' and customize with your actual network devices
+
+# ============================================================================
+# Location: Data Center 1
+# ============================================================================
+[dc1_switches]
+192.168.1.10    # Core Switch 1
+192.168.1.11    # Core Switch 2
+192.168.1.20    # Access Switch 1
+
+[dc1_routers]
+192.168.1.1     # Border Router
+
+# ============================================================================
+# Location: Data Center 2
+# ============================================================================
+[dc2_switches]
+192.168.2.10    # Core Switch 1
+192.168.2.20    # Access Switch 1
+
+# ============================================================================
+# Location: Lab Environment
+# ============================================================================
+[lab_switches]
+192.168.100.1   # Lab Switch Stack
+
+[lab_routers]
+192.168.100.254 # Lab Router
+
+[lab_nexus]
+192.168.255.1   # Nexus Spine 1
+192.168.255.2   # Nexus Spine 2
+
+# ============================================================================
+# Location Groups (for targeting by location)
+# ============================================================================
+[dc1:children]
+dc1_switches
+dc1_routers
+
+[dc2:children]
+dc2_switches
+
+[lab:children]
+lab_switches
+lab_routers
+lab_nexus
+
+# ============================================================================
+# Functional Groups (for targeting by device type)
+# ============================================================================
+[switches:children]
+dc1_switches
+dc2_switches
+lab_switches
+
+[routers:children]
+dc1_routers
+lab_routers
+
+[core:children]
+dc1_switches

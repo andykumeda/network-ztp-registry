@@ -14,7 +14,7 @@ from collections import Counter
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from lookup import get_lookup_source
 from state_io import load_state, save_state
-from itsm_push import push_device_async
+from servicenow_push import push_device_async
 import logging
 
 logger = logging.getLogger(__name__)
@@ -232,6 +232,15 @@ def migrate_db():
         for col, sql in migrations:
             if col not in existing:
                 conn.execute(sql)
+        if 'engineer' in existing:
+            try:
+                conn.execute('ALTER TABLE devices DROP COLUMN engineer')
+            except sqlite3.OperationalError as exc:
+                logger.warning(
+                    'migrate_db: could not drop engineer column; clearing values instead: %s',
+                    exc,
+                )
+                conn.execute('UPDATE devices SET engineer=NULL')
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -323,6 +332,17 @@ def create_device():
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     with get_db() as conn:
+        if (d.get('status') or '').lower() != 'failed':
+            if serial and serial != 'UNKNOWN':
+                conn.execute(
+                    "DELETE FROM devices WHERE status='failed' AND UPPER(serial)=UPPER(?)",
+                    (serial,),
+                )
+            if d.get('port_label'):
+                conn.execute(
+                    "DELETE FROM devices WHERE status='failed' AND port_label=?",
+                    (d.get('port_label'),),
+                )
         cur = conn.execute(
             '''INSERT INTO devices
                (hostname, model, serial, ip_address,
@@ -383,8 +403,9 @@ def delete_device(did):
         full_row = conn.execute(f'SELECT {DEVICE_SELECT} FROM devices WHERE id=?', (did,)).fetchone()
         serial = full_row['serial'] if full_row else None
         conn.execute('DELETE FROM devices WHERE id=?', (did,))
-    # Push soft-delete to the optional ITSM webhook before local state is gone.
-    # Downstream transforms can interpret status='deleted' as a retirement flag.
+    # Push soft-delete to ServiceNow before local state is gone. Coalesces on
+    # serial_number; SN-side transform can interpret status='deleted' as a
+    # retirement flag (u_active=false, etc.).
     if full_row:
         payload = dict(full_row)
         payload['status'] = 'deleted'
@@ -479,7 +500,7 @@ def stream():
 
 
 def _sync_device_fields(device_id: int, updates: dict) -> None:
-    """Write a small set of allowed fields to a device row and push to ITSM.
+    """Write a small set of allowed fields to a device row and push to ServiceNow.
 
     Used after an ansible run mutates switch state so that the registry and SN
     mirror the new values. Only columns that exist on the devices table and are
@@ -726,7 +747,7 @@ def run_ansible_playbook():
             run['event'].set()
 
             # On success, sync any ansible-mutated DB-tracked fields so that
-            # ITSM integrations (and the UI) reflect the switch's new state. Only
+            # ServiceNow (and the UI) reflect the switch's new state. Only
             # fields that are both in the DB schema AND settable by the
             # playbook are propagated.
             if proc.returncode == 0 and isinstance(extra_vars, dict):

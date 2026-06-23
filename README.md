@@ -1,75 +1,50 @@
 # Network ZTP Registry
 
-Network ZTP Registry is a portfolio-safe Zero Touch Provisioning system for
-network switch staging. It demonstrates how a small Flask service, a browser
-dashboard, a console-server poller, and an on-device ZTP script can work
-together to discover devices, track staging progress, capture hardware
-inventory, and sync clean registry records to an optional ITSM/CMDB webhook.
+Public-safe source for a Cisco Catalyst Zero Touch Provisioning registry.
 
-This public version uses synthetic data and generic lab addresses. It is not a
-copy of a production deployment, and no real serial numbers, hostnames,
-credentials, room mappings, or customer data are included.
+The stack combines:
 
-## What It Shows
+- Flask + SQLite device registry and browser dashboard
+- OpenGear console polling for ZTP progress and completion markers
+- dnsmasq DHCP option delivery for Cisco PnP bootstrapping
+- nginx static serving for `ztp.py`, `config.json`, and IOS images
+- optional Ansible playbook execution after a switch is registered
+- optional ServiceNow push integration
 
-- Flask API with SQLite-backed device registry and Server-Sent Events updates
-- Browser dashboard for live staging status, asset tagging, CSV export, labels,
-  and ad hoc Ansible playbook execution
-- Console-server poller that parses ZTP markers from serial logs
-- On-switch Python ZTP script for first-boot configuration and inventory capture
-- Optional outbound ITSM/CMDB webhook with batched best-effort delivery
-- Local seeded demo that works without switches, OpenGear hardware, IOS images,
-  or ITSM credentials
+This repository is sanitized for public sharing. It includes fake lookup CSVs,
+placeholder IP addresses from documentation ranges, and example configuration
+only. It intentionally excludes private handoff notes, real serial/location
+data, runtime databases, secrets, IOS images, generated docs, and vendored
+Ansible collections.
 
-## Local Demo
+## Local Shape
 
-### Python-only demo
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-demo.txt
-python server.py
-```
-
-In a second terminal:
+1. Copy `.env.example` to `.env` and adjust the placeholder network values.
+2. Copy `config.json.example` to `config.json` and set target IOS metadata and
+   switch credentials for your lab.
+3. Put IOS `.bin` files in the directory referenced by `IOS_IMAGES_DIR`.
+4. Run the stack with Docker Compose:
 
 ```bash
-source .venv/bin/activate
-python scripts/seed_demo.py
+docker compose up -d --build
 ```
 
-Open <http://localhost:5000>.
+The dashboard listens on port `5000`. nginx serves ZTP assets on port `8080`
+by default.
 
-### Docker demo
+## Lookup Data
+
+`model-sn.csv` maps serial number to Cisco PID. `model-loc.csv` maps planned
+slots for each PID to building, floor, room, role, and expected module string.
+The included files are fake examples only.
+
+## Public Safety
+
+Before pushing this mirror, regenerate it from the private repo:
 
 ```bash
-docker compose -f docker-compose.demo.yml up --build
-python scripts/seed_demo.py
+python3 tools/export_public.py /path/to/network-ztp-registry
 ```
 
-Open <http://localhost:5000>.
-
-## Hardware Lab Mode
-
-Copy `.env.example` to `.env`, set lab-specific values, provide IOS images and
-Ansible credentials, then use `docker-compose.yml`. The lab mode expects real
-network access to a console server and a dedicated switch staging network.
-
-## Repository Map
-
-- `server.py` - Flask API, dashboard host, registry database, SSE, Ansible run API
-- `static/index.html` - self-contained dashboard UI
-- `opengear_poller.py` - console-server polling and ZTP marker parsing
-- `ztp.py` - on-device Cisco PnP/ZTP script
-- `lookup.py` - hot-reloaded CSV serial-to-PID lookup
-- `itsm_push.py` - optional vendor-neutral ITSM/CMDB webhook worker
-- `model-sn.csv`, `model-loc.csv` - sanitized demo lookup data
-- `docs/` - architecture, demo, and integration notes
-
-## Sanitization Notice
-
-All public data is synthetic. Private operational runbooks, generated handoff
-documents, real lookup tables, vendored Ansible collections, and environment
-specific deployment material were intentionally excluded from this portfolio
-release.
+Then scan the public tree for internal IPs, domains, serials, and secret
+patterns before committing.

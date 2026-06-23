@@ -1,0 +1,83 @@
+---
+# ============================================================================
+# Configuration Backup Playbook
+# ============================================================================
+# Purpose: Backup running configurations from network devices
+# Features:
+#   - Supports both IOS-XE and NX-OS devices
+#   - Automatically creates timestamped backup files
+#   - Organizes backups in dedicated directory
+#   - Displays backup location for verification
+#
+# Usage: ansible-playbook backup_configs.yml
+#        ansible-playbook backup_configs.yml --limit dc1_switches
+#
+# Output: Backups saved to ./backups/<hostname>_<timestamp>.cfg
+# ============================================================================
+
+- name: Backup Device Configurations
+  hosts: all
+  gather_facts: no
+  
+  vars:
+    backup_dir: "./backups"  # Directory to store backup files
+    # Generate timestamp in format: YYYYMMDD_HHMMSS
+    timestamp: "{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}"
+  
+  tasks:
+    # ------------------------------------------------------------------------
+    # Preparation
+    # ------------------------------------------------------------------------
+    # Create backup directory if it doesn't exist
+    # Runs once on localhost (Ansible control node)
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'  # rwxr-xr-x permissions
+      delegate_to: localhost  # Run on Ansible control node, not on network devices
+      run_once: true  # Only need to create directory once, not for each device
+
+    # ------------------------------------------------------------------------
+    # IOS-XE Backup
+    # ------------------------------------------------------------------------
+    # Backup configuration from IOS-XE devices (Catalyst switches, ISR routers, etc.)
+    # The ios_config module has built-in backup functionality
+    - name: Backup IOS-XE configuration
+      cisco.ios.ios_config:
+        backup: yes  # Enable backup mode
+        backup_options:
+          filename: "{{ inventory_hostname }}_{{ timestamp }}.cfg"  # Custom filename
+          dir_path: "{{ backup_dir }}"  # Save to backups directory
+      # Only run on IOS-XE devices (auto-detected or default)
+      when: ansible_network_os == 'ios' or ansible_network_os == 'cisco.ios.ios' or ansible_network_os is not defined
+      register: backup_ios  # Save result for display
+
+    # ------------------------------------------------------------------------
+    # NX-OS Backup
+    # ------------------------------------------------------------------------
+    # Backup configuration from NX-OS devices (Nexus switches)
+    # Similar to IOS-XE but uses nxos_config module
+    - name: Backup NX-OS configuration
+      cisco.nxos.nxos_config:
+        backup: yes
+        backup_options:
+          filename: "{{ inventory_hostname }}_{{ timestamp }}.cfg"
+          dir_path: "{{ backup_dir }}"
+      when: ansible_network_os == 'nxos' or ansible_network_os == 'cisco.nxos.nxos'
+      register: backup_nxos
+
+    # ------------------------------------------------------------------------
+    # Verification and Display
+    # ------------------------------------------------------------------------
+    # Show where the IOS-XE backup was saved
+    - name: Display backup location (IOS-XE)
+      debug:
+        msg: "Configuration backed up to: {{ backup_ios.backup_path }}"
+      when: backup_ios.backup_path is defined
+
+    # Show where the NX-OS backup was saved
+    - name: Display backup location (NX-OS)
+      debug:
+        msg: "Configuration backed up to: {{ backup_nxos.backup_path }}"
+      when: backup_nxos.backup_path is defined

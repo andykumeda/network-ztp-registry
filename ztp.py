@@ -53,7 +53,7 @@ try:
         _parsed = urlparse(_boot_url)
         if _parsed.hostname:
             _ztp_server_ip = _parsed.hostname
-            # Reconstruct base URL preserving port (e.g. http://10.10.10.10:8080)
+            # Reconstruct base URL preserving port (e.g. http://192.0.2.253:8080)
             _ztp_base_url = f"{_parsed.scheme}://{_parsed.netloc}"
 except Exception:
     pass

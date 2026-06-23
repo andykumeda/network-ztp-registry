@@ -17,7 +17,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py lookup.py state_io.py itsm_push.py ./
+COPY server.py lookup.py state_io.py servicenow_push.py ./
 COPY static/ static/
 
 ENV PORT=5000

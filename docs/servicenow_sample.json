@@ -1,0 +1,64 @@
+{
+  "_comment": "Sample payload structure ZTP will POST to https://example.service-now.com/api/unofv/mgn_staging/switches. Two sections: single-record (what ZTP sends for one device) and batch (array form if batching is preferred). All fields are flat, lowercase snake_case. 'hw_inventory' is a JSON-encoded string listing component serials (chassis, linecards, supervisors, PSUs, fan tray). Nullable: floor, asset_tag, notes, port_label, failure_reason. Admin maps these to u_* columns on u_mgn_staging.",
+
+  "single_record": {
+    "hostname":       "HRW-1318-9410-EN",
+    "serial_number":  "SERIAL000001",
+    "model":          "C9410R",
+    "ip_address":     "192.0.2.141",
+    "building":       "HRW",
+    "floor":          null,
+    "room":           "1318",
+    "module":         "(5) C9400-LC-48HN",
+    "asset_tag":      null,
+    "notes":          null,
+    "ios_version":    "17.18.2",
+    "port_label":     null,
+    "hw_inventory":   "[{\"name\": \"Chassis\", \"pid\": \"C9410R\", \"sn\": \"SERIAL000001\"}, {\"name\": \"Slot 1 Linecard\", \"slot\": \"1\", \"pid\": \"C9400-LC-48HN\", \"sn\": \"SERIAL000001\"}, {\"name\": \"Slot 5 Supervisor\", \"slot\": \"5\", \"pid\": \"C9400X-SUP-2\", \"sn\": \"SERIAL000001\"}, {\"name\": \"Power Supply Module 1\", \"pid\": \"C9400-PWR-3200AC\", \"sn\": \"SERIAL000001\"}, {\"name\": \"Fan Tray\", \"pid\": \"C9410-FAN\", \"sn\": \"SERIAL000001\"}]",
+    "status":         "provisioned",
+    "failure_reason": null,
+    "provisioned_at": "2026-04-20T22:23:52.553907+00:00",
+    "updated_at":     "2026-04-21T17:28:13.308200+00:00"
+  },
+
+  "batch_records": [
+    {
+      "hostname":       "HRW-1318-9410-EN",
+      "serial_number":  "SERIAL000001",
+      "model":          "C9410R",
+      "ip_address":     "192.0.2.141",
+      "building":       "HRW",
+      "floor":          null,
+      "room":           "1318",
+      "module":         "(5) C9400-LC-48HN",
+      "asset_tag":      null,
+      "notes":          null,
+      "ios_version":    "17.18.2",
+      "port_label":     null,
+      "hw_inventory":   "[{\"name\": \"Chassis\", \"pid\": \"C9410R\", \"sn\": \"SERIAL000001\"}]",
+      "status":         "provisioned",
+      "failure_reason": null,
+      "provisioned_at": "2026-04-20T22:23:52.553907+00:00",
+      "updated_at":     "2026-04-21T17:28:13.308200+00:00"
+    },
+    {
+      "hostname":       "LEG-1-9300-EN",
+      "serial_number":  "SERIAL000001",
+      "model":          "C9300X-48HX",
+      "ip_address":     "192.0.2.100",
+      "building":       "LEG",
+      "floor":          null,
+      "room":           "1",
+      "module":         "",
+      "asset_tag":      null,
+      "notes":          null,
+      "ios_version":    "17.18.2",
+      "port_label":     null,
+      "hw_inventory":   "[{\"name\": \"c93xx Stack\", \"pid\": \"C9300X-48HX\", \"sn\": \"SERIAL000001\"}, {\"name\": \"Switch 1 - Power Supply A\", \"pid\": \"PWR-C1-1100WAC-P\", \"sn\": \"SERIAL000001\"}]",
+      "status":         "provisioned",
+      "failure_reason": null,
+      "provisioned_at": "2026-04-20T22:21:46.582631+00:00",
+      "updated_at":     "2026-04-20T22:21:46.582631+00:00"
+    }
+  ]
+}

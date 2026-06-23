@@ -1,13 +1,115 @@
----
-- name: Report network OS version
+- name: Check OS version and generate upgrade report
   hosts: all
-  gather_facts: false
-  tasks:
-    - name: Collect show version
-      ansible.netcommon.cli_command:
-        command: show version
-      register: version_output
+  gather_facts: no
+  vars:
+    ios_target:  "{{ ios_target_version  | default('') }}"
+    nxos_target: "{{ nxos_target_version | default('') }}"
 
-    - name: Show version summary
-      ansible.builtin.debug:
-        msg: "{{ inventory_hostname }} version output collected"
+  tasks:
+    - name: Normalize OS type
+      set_fact:
+        _os_lower: "{{ (ansible_network_os | default('')) | lower }}"
+
+    - name: Derive OS booleans
+      set_fact:
+        is_ios:  "{{ '_ios' in _os_lower or 'ios' in _os_lower }}"
+        is_nxos: "{{ 'nxos' in _os_lower }}"
+
+    - name: Ensure temp report dir exists
+      delegate_to: localhost
+      run_once: true
+      file:
+        path: /tmp/version_checker
+        state: directory
+
+    # ── IOS ──────────────────────────────────────────────────────────────────
+    - name: Get IOS version
+      when: is_ios
+      ansible.builtin.cli_command:
+        command: show version
+      register: _ios_show_ver
+
+    - name: Parse IOS version
+      when: is_ios
+      set_fact:
+        current_version: "{{ (_ios_show_ver.stdout | default('')) | regex_findall('Version\\s+([^,\\s]+)') | first | default('unknown') }}"
+        target_version:  "{{ ios_target }}"
+
+    # ── NX-OS ────────────────────────────────────────────────────────────────
+    - name: Get NX-OS version
+      when: is_nxos
+      ansible.builtin.cli_command:
+        command: show version
+      register: _nxos_show_ver
+
+    - name: Parse NX-OS version
+      when: is_nxos
+      set_fact:
+        current_version: "{{ (_nxos_show_ver.stdout | default('')) | regex_findall('NXOS:\\s+version\\s+([^\\n]+)') | first | default('unknown') }}"
+        target_version:  "{{ nxos_target }}"
+
+    # ── Normalize versions (strip leading zeros per dotted segment) ──────────
+    - name: Normalize versions
+      when: current_version is defined
+      set_fact:
+        _current_norm: "{{ current_version.split('.') | map('int') | map('string') | join('.') }}"
+        _target_norm:  "{{ target_version.split('.')  | map('int') | map('string') | join('.') }}"
+
+    # ── Write per-host result to a temp file on the control node ─────────────
+    - name: Record result — needs upgrade
+      when: current_version is defined and _current_norm != _target_norm
+      lineinfile:
+        path: "/tmp/version_checker/{{ inventory_hostname }}.txt"
+        line: "[UPGRADE NEEDED]  {{ inventory_hostname }}  running={{ current_version }}  target={{ target_version }}"
+        create: yes
+      delegate_to: localhost
+
+    - name: Record result — up to date
+      when: current_version is defined and _current_norm == _target_norm
+      lineinfile:
+        path: "/tmp/version_checker/{{ inventory_hostname }}.txt"
+        line: "[OK]              {{ inventory_hostname }}  version={{ current_version }}"
+        create: yes
+      delegate_to: localhost
+
+    # ── Assemble final report ─────────────────────────────────────────────────
+    - name: Assemble report
+      delegate_to: localhost
+      run_once: true
+      shell: |
+        REPORT="/tmp/ztp_version_report.txt"
+        TMPDIR="/tmp/version_checker"
+        DATE=$(date '+%Y-%m-%d %H:%M:%S')
+
+        echo "IOS/NX-OS Version Report — ${DATE}" > "${REPORT}"
+        echo "============================================================" >> "${REPORT}"
+
+        if ls "${TMPDIR}"/*.txt 1>/dev/null 2>&1; then
+          # UPGRADE NEEDED first, then OK
+          grep -h "\[UPGRADE NEEDED\]" "${TMPDIR}"/*.txt >> "${REPORT}" || true
+          grep -h "^\[OK\]"           "${TMPDIR}"/*.txt >> "${REPORT}" || true
+
+          NEED=$(grep -h "\[UPGRADE NEEDED\]" "${TMPDIR}"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+          OK=$(  grep -h "^\[OK\]"            "${TMPDIR}"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+
+          echo "------------------------------------------------------------" >> "${REPORT}"
+          echo "Summary: ${NEED} need upgrade, ${OK} up to date"             >> "${REPORT}"
+
+          rm -f "${TMPDIR}"/*.txt
+        else
+          echo "(no results — no hosts matched)" >> "${REPORT}"
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Read report
+      delegate_to: localhost
+      run_once: true
+      command: cat /tmp/ztp_version_report.txt
+      register: _report
+
+    - name: Print report
+      delegate_to: localhost
+      run_once: true
+      debug:
+        msg: "{{ _report.stdout }}"

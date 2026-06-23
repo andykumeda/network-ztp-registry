@@ -1,29 +1,87 @@
 ---
-- name: Apply demo-safe device settings
+# configure_device.yml
+# Applies per-device configuration via --extra-vars.
+# Every task is guarded so only supplied variables are acted on.
+#
+# Usage:
+#   ansible-playbook -i <ip>, configure_device.yml \
+#     --extra-vars '{"hostname":"sw-core-01","ntp_server":"10.0.0.1"}'
+#
+# Supported variables:
+#   hostname         - device hostname
+#   domain_name      - IP domain name
+#   dns_server1      - primary DNS server IP
+#   dns_server2      - secondary DNS server IP
+#   ntp_server       - NTP server IP or hostname
+#   syslog_server    - syslog server IP
+#   mgmt_ip          - management IP address (e.g. 10.1.0.5)
+#   mgmt_mask        - subnet mask (e.g. 255.255.255.0)
+#   mgmt_interface   - interface name (e.g. GigabitEthernet0/0)
+#   default_gateway  - default gateway IP
+
+- name: Configure Device Parameters
   hosts: all
   gather_facts: false
-  vars:
-    hostname: ""
-    domain_name: ""
-    dns_server1: ""
-    dns_server2: ""
-    ntp_server: ""
-    syslog_server: ""
-  tasks:
-    - name: Build candidate configuration
-      ansible.builtin.set_fact:
-        candidate_config: >-
-          {{
-            []
-            + ([ 'hostname ' ~ hostname ] if hostname else [])
-            + ([ 'ip domain-name ' ~ domain_name ] if domain_name else [])
-            + ([ 'ip name-server ' ~ dns_server1 ] if dns_server1 else [])
-            + ([ 'ip name-server ' ~ dns_server2 ] if dns_server2 else [])
-            + ([ 'ntp server ' ~ ntp_server ] if ntp_server else [])
-            + ([ 'logging host ' ~ syslog_server ] if syslog_server else [])
-          }}
 
-    - name: Apply candidate configuration
+  tasks:
+
+    - name: Set hostname
+      cisco.ios.ios_system:
+        hostname: "{{ hostname }}"
+      when: hostname is defined and hostname != ''
+
+    - name: Set domain name
+      cisco.ios.ios_system:
+        domain_name: "{{ domain_name }}"
+      when: domain_name is defined and domain_name != ''
+
+    - name: Configure DNS name servers
+      cisco.ios.ios_system:
+        name_servers: >-
+          {{
+            ([dns_server1] if (dns_server1 is defined and dns_server1 != '') else []) +
+            ([dns_server2] if (dns_server2 is defined and dns_server2 != '') else [])
+          }}
+      when: >
+        (dns_server1 is defined and dns_server1 != '') or
+        (dns_server2 is defined and dns_server2 != '')
+
+    - name: Configure NTP server
+      cisco.ios.ios_ntp_global:
+        config:
+          servers:
+            - server: "{{ ntp_server }}"
+        state: merged
+      when: ntp_server is defined and ntp_server != ''
+
+    - name: Configure syslog server
+      cisco.ios.ios_logging_global:
+        config:
+          hosts:
+            - hostname: "{{ syslog_server }}"
+              xml: true
+              transport:
+                tcp:
+                  port: 514
+        state: merged
+      when: syslog_server is defined and syslog_server != ''
+
+    - name: Configure management IP address on interface
       cisco.ios.ios_config:
-        lines: "{{ candidate_config }}"
-      when: candidate_config | length > 0
+        lines:
+          - "ip address {{ mgmt_ip }} {{ mgmt_mask }}"
+        parents: "interface {{ mgmt_interface }}"
+      when: >
+        mgmt_ip is defined and mgmt_ip != '' and
+        mgmt_mask is defined and mgmt_mask != '' and
+        mgmt_interface is defined and mgmt_interface != ''
+
+    - name: Configure default gateway
+      cisco.ios.ios_config:
+        lines:
+          - "ip default-gateway {{ default_gateway }}"
+      when: default_gateway is defined and default_gateway != ''
+
+    - name: Save configuration if modified
+      cisco.ios.ios_config:
+        save_when: modified

@@ -2,12 +2,12 @@
 set -e
 
 # Substitute environment variables into the dnsmasq config template.
-# Defaults are demo-safe RFC1918 values. Override these in .env for real labs.
-ZTP_SERVER_IP="${ZTP_SERVER_IP:-10.10.10.10}"
+# All variables have defaults that match the reference environment (192.0.2.0/24).
+ZTP_SERVER_IP="${ZTP_SERVER_IP:-192.0.2.14}"
 ZTP_WEB_PORT="${ZTP_WEB_PORT:-80}"
-DHCP_RANGE_START="${DHCP_RANGE_START:-10.10.10.100}"
-DHCP_RANGE_END="${DHCP_RANGE_END:-10.10.10.200}"
-DHCP_ROUTER="${DHCP_ROUTER:-10.10.10.1}"
+DHCP_RANGE_START="${DHCP_RANGE_START:-192.0.2.100}"
+DHCP_RANGE_END="${DHCP_RANGE_END:-192.0.2.200}"
+DHCP_ROUTER="${DHCP_ROUTER:-192.0.2.1}"
 DHCP_DNS="${DHCP_DNS:-8.8.8.8,8.8.4.4}"
 DHCP_INTERFACE="${DHCP_INTERFACE:-eth0}"
 

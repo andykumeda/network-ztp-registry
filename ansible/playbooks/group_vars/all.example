@@ -1,15 +1,90 @@
-ansible_connection: network_cli
-ansible_network_os: ios
-ansible_user: ztp_demo_user
-ansible_password: change-me
-ansible_become: true
-ansible_become_method: enable
-ansible_become_password: change-me
+# Ansible Configuration Variables
+# This is an EXAMPLE file - copy to 'all' and customize for your environment
 
-domain_name: ztp-demo.local
-name_server1: 1.1.1.1
-name_server2: 8.8.8.8
-ntp_server1: time.example.net
-syslog_host1: 10.10.10.50
-ios_target_version: "17.12.1"
-nxos_target_version: "10.4(1)"
+# ============================================================================
+# Ansible Connection Settings
+# ============================================================================
+ansible_connection: network_cli
+ansible_network_os: ios  # Default to IOS, auto-detected in playbooks
+ansible_user: your_ansible_username
+
+# Ansible password - use ansible-vault to encrypt:
+# ansible-vault encrypt_string 'your_password' --name 'ansible_password'
+ansible_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          <your_encrypted_password_here>
+
+ansible_become: yes
+ansible_become_method: enable
+
+# ============================================================================
+# NTP Configuration
+# ============================================================================
+ntp_server1: ntp.example.com
+# ntp_source_int: "GigabitEthernet0/0"  # Optional: source interface
+
+# ============================================================================
+# Timezone Settings
+# ============================================================================
+timezone: "PST"
+offset: "-8"
+daylight_savings: "PDT"
+
+# ============================================================================
+# DNS Configuration
+# ============================================================================
+name_server1: 8.8.8.8
+name_server2: 8.8.4.4
+
+# ============================================================================
+# Domain Name
+# ============================================================================
+domain_name: example.com
+
+# ============================================================================
+# SNMP Configuration
+# ============================================================================
+# SNMP passwords - encrypt with ansible-vault
+snmp_auth_pass: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          <your_encrypted_snmp_auth_password_here>
+
+snmp_priv_pass: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          <your_encrypted_snmp_priv_password_here>
+
+# ============================================================================
+# Syslog Configuration
+# ============================================================================
+syslog_host1: 10.0.0.10  # Primary syslog server
+syslog_host2: 10.0.0.20  # Secondary syslog server
+
+# ============================================================================
+# SNMP Monitoring
+# ============================================================================
+snmp_monitoring_host: 10.0.0.30  # SNMP monitoring/polling server
+
+# ============================================================================
+# SNMP Vulnerability Mitigation
+# ============================================================================
+snmp_v3_group: v3group
+# Note: snmp_community_string should be defined if using SNMPv2 mitigation
+# It is intentionally not set here - define in vault-encrypted file if needed
+
+# ============================================================================
+# OS Version Targets for Upgrades
+# ============================================================================
+ios_target_version: "17.18.1"
+nxos_target_version: "10.6(1)F"
+
+# ============================================================================
+# Reporting Paths
+# ============================================================================
+upgrade_report_path: "/opt/ansible/playbooks/upgrade_report.txt"
+
+# ============================================================================
+# NX-OS Specific Settings
+# ============================================================================
+nxos_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          <your_encrypted_nxos_password_here>

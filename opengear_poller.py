@@ -5,7 +5,7 @@ Polls all console ports on the OpenGear appliance, enables port logging
 if not already set, and parses ZTP output to register devices in server.py.
 
 Environment variables:
-  OPENGEAR_HOST      OpenGear IP/hostname (default: 10.10.10.20)
+  OPENGEAR_HOST      OpenGear IP/hostname (default: 198.51.100.10)
   OPENGEAR_USER      Username for OpenGear API authentication (required)
   OPENGEAR_PASSWORD  Password for OpenGear API authentication (required)
   OPENGEAR_SCHEME    http or https (default: https)
@@ -31,7 +31,7 @@ from state_io import load_state, save_state
 _STATE_FILE = os.environ.get('POLLER_STATE_PATH',
                               os.path.join(os.path.dirname(os.path.abspath(__file__)), '.poller_state.json'))
 
-OPENGEAR_HOST = os.environ.get('OPENGEAR_HOST', '10.10.10.20')
+OPENGEAR_HOST = os.environ.get('OPENGEAR_HOST', '198.51.100.10')
 OPENGEAR_USER = os.environ.get('OPENGEAR_USER', '')
 OPENGEAR_PASSWORD = os.environ.get('OPENGEAR_PASSWORD', '')
 OPENGEAR_SCHEME = os.environ.get('OPENGEAR_SCHEME', 'https')
@@ -205,10 +205,14 @@ def parse_ztp_output(lines):
             # These indicators mean the device has rebooted since ZTP finished.
             # NOTE: "Press RETURN" is NOT a reboot indicator — it appears
             # normally after ZTP script completion (PnP hands back control).
-            if re.search(r'Initializing Hardware|System Bootstrap|RESTART|'
-                         r'Rommon|switch:\s*$|Booting\.\.\.|IOSXEBOOT|'
-                         r'boot:\s*attempting|SMART_LOG',
-                         after_ztp, re.MULTILINE):
+            rebooted_after_ztp = re.search(
+                r'Initializing Hardware|System Bootstrap|RESTART|'
+                r'Rommon|switch:\s*$|Booting\.\.\.|IOSXEBOOT|'
+                r'boot:\s*attempting|SMART_LOG',
+                after_ztp,
+                re.MULTILINE,
+            )
+            if rebooted_after_ztp and status != 'upgrading':
                 # The ZTP session is over and the device has rebooted.
                 # Return None so the caller treats this as "no active ZTP".
                 # Pending upgrades are handled separately in poll().
@@ -285,9 +289,20 @@ def _server_get_failed_devices():
         return json.loads(resp.read().decode())
 
 
+def _blocks_registration(device):
+    """Return True for rows that represent a successfully tracked device.
+
+    Failed rows are diagnostic artifacts. They must not block a later successful
+    retry for the same switch, otherwise the live card clears but no dashboard
+    row is created.
+    """
+    return (device.get('status') or '').lower() != 'failed'
+
+
 def device_exists(serial, hostname):
-    """Returns True if this serial exists (fallback to hostname for UNKNOWN serials) in ALL devices list."""
+    """Return True if this serial/hostname is already registered successfully."""
     devices = _server_get_all_devices()
+    devices = [d for d in devices if _blocks_registration(d)]
     if serial and serial != "UNKNOWN":
         return any(d.get('serial') == serial for d in devices)
     return any(d.get('hostname') == hostname for d in devices)
@@ -313,7 +328,7 @@ def post_live_session(port_id, port_label, progress, status, clear=False):
 
 # Persistent state: tracks which serial was last registered per port.
 # Survives poller restarts so stale portlog data doesn't re-register.
-# Format: { "ports-7": {"serial": "DEMO...", "hostname": "9410-ZTP-105"}, ... }
+# Format: { "ports-7": {"serial": "FOX...", "hostname": "9410-ZTP-105"}, ... }
 _port_state = {}
 _recorded_failures = set()   # (port_id, key) for failures — session-only
 
@@ -403,6 +418,7 @@ def poll():
             # The 'text_data' join handles this reasonably, but regex is safer.
             success_patterns = [
                 r'Press RETURN to get started',
+                r'Would you like to enter the initial configuration dialog',
                 r'Script execution success',
                 r'SYS-5-RESTART',
                 r'SYS-5-CONFIG_I',
@@ -559,6 +575,7 @@ def poll():
             device = {k: v for k, v in info.items()
                       if k in ('hostname', 'model', 'serial', 'ip_address',
                                 'ios_version', 'hw_inventory')}
+            device['port_label'] = port_label
             if not prev.get('pending'):
                 print(f"[opengear] {port_id}: upgrade triggered for {hostname}, saving data pending boot confirmation")
                 _port_state[port_id] = {'serial': serial, 'hostname': hostname, 'pending': device}
@@ -569,6 +586,7 @@ def poll():
         device = {k: v for k, v in info.items()
                   if k in ('hostname', 'model', 'serial', 'ip_address',
                             'ios_version', 'hw_inventory')}
+        device['port_label'] = port_label
 
         print(f"[opengear] ZTP device found on {port_id} ({port_label}): {hostname}")
         result = register_device(device)

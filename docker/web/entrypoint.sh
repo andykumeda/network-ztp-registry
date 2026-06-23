@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-ZTP_SERVER_IP="${ZTP_SERVER_IP:-10.10.10.10}"
+ZTP_SERVER_IP="${ZTP_SERVER_IP:-192.0.2.14}"
 ZTP_WEB_PORT="${ZTP_WEB_PORT:-80}"
 
 # Substitute server IP and port into the ztp.py template so switches that

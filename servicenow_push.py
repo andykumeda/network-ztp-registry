@@ -1,7 +1,7 @@
-"""Generic ITSM webhook integration for the ZTP device registry.
+"""ServiceNow push integration for ZTP device registry.
 
-Posts device records to an external ITSM or CMDB webhook as a batched JSON
-array. The webhook is optional and disabled by default.
+Posts device records to ServiceNow's scripted REST endpoint
+(u_mgn_staging import table) as a batched JSON array.
 
 Design notes:
   - stdlib only — ztp.py on the switch has no third-party deps; the server
@@ -10,10 +10,11 @@ Design notes:
     Errors are logged; the local registry remains the source of truth.
   - Batched: callers invoke ``push_device_async`` which queues the payload.
     A single background worker drains the queue in short time windows
-    (ITSM_BATCH_WINDOW seconds) and POSTs each window as one array.
+    (SERVICENOW_BATCH_WINDOW seconds) and POSTs each window as one array.
+    Requested by the ServiceNow admin to minimize load on their side.
   - Deduped per batch: if the same serial appears multiple times in one
     window (e.g. rapid create+update), only the most recent payload is sent.
-    Downstream systems can coalesce on serial_number across batches.
+    ServiceNow-side coalesce on serial_number handles cross-batch dedupe.
 """
 
 import base64
@@ -28,12 +29,12 @@ import urllib.request
 
 logger = logging.getLogger(__name__)
 
-_URL          = os.environ.get('ITSM_URL', '').strip()
-_USER         = os.environ.get('ITSM_USER', '').strip()
-_PASS         = os.environ.get('ITSM_PASS', '')
-_ENABLED      = os.environ.get('ITSM_ENABLED', 'false').lower() == 'true'
-_TIMEOUT      = int(os.environ.get('ITSM_TIMEOUT', '10'))
-_BATCH_WINDOW = float(os.environ.get('ITSM_BATCH_WINDOW', '10'))
+_URL          = os.environ.get('SERVICENOW_URL', '').strip()
+_USER         = os.environ.get('SERVICENOW_USER', '').strip()
+_PASS         = os.environ.get('SERVICENOW_PASS', '')
+_ENABLED      = os.environ.get('SERVICENOW_ENABLED', 'false').lower() == 'true'
+_TIMEOUT      = int(os.environ.get('SERVICENOW_TIMEOUT', '10'))
+_BATCH_WINDOW = float(os.environ.get('SERVICENOW_BATCH_WINDOW', '10'))
 
 _queue: 'queue.Queue[dict]' = queue.Queue()
 _worker_started = False
@@ -41,9 +42,10 @@ _worker_lock = threading.Lock()
 
 
 def _to_payload(device: dict) -> dict:
-    """Map a ZTP device row (dict from sqlite3.Row) to a flat webhook payload.
+    """Map a ZTP device row (dict from sqlite3.Row) to the flat ServiceNow payload.
 
-    Field names are lowercase snake_case and intentionally vendor-neutral.
+    Field names are lowercase snake_case. The ServiceNow admin has mapped these
+    directly as u_mgn_staging column labels (no u_ prefix needed).
     """
     hw = device.get('hw_inventory')
     if isinstance(hw, (list, dict)):
@@ -70,9 +72,9 @@ def _to_payload(device: dict) -> dict:
 
 
 def _post_batch(batch: list) -> None:
-    """POST a batched JSON array to the ITSM webhook. Logs on error, never raises."""
+    """POST a batched JSON array to ServiceNow. Logs on error, never raises."""
     if not (_URL and _USER and _PASS):
-        logger.warning('itsm_push: missing URL/USER/PASS; skipping batch of %d', len(batch))
+        logger.warning('servicenow_push: missing URL/USER/PASS — skipping batch of %d', len(batch))
         return
     if not batch:
         return
@@ -94,19 +96,19 @@ def _post_batch(batch: list) -> None:
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             status = resp.status
             if 200 <= status < 300:
-                logger.info('itsm_push: ok count=%d status=%s serials=%s',
+                logger.info('servicenow_push: ok count=%d status=%s serials=%s',
                             len(batch), status, serials)
             else:
-                logger.warning('itsm_push: non-2xx count=%d status=%s body=%s',
+                logger.warning('servicenow_push: non-2xx count=%d status=%s body=%s',
                                len(batch), status, resp.read()[:500])
     except urllib.error.HTTPError as e:
-        logger.warning('itsm_push: HTTP %s count=%d serials=%s body=%s',
+        logger.warning('servicenow_push: HTTP %s count=%d serials=%s body=%s',
                        e.code, len(batch), serials, e.read()[:500])
     except urllib.error.URLError as e:
-        logger.warning('itsm_push: URL error count=%d serials=%s reason=%s',
+        logger.warning('servicenow_push: URL error count=%d serials=%s reason=%s',
                        len(batch), serials, e.reason)
     except Exception as e:
-        logger.warning('itsm_push: unexpected error count=%d serials=%s err=%s',
+        logger.warning('servicenow_push: unexpected error count=%d serials=%s err=%s',
                        len(batch), serials, e)
 
 
@@ -151,7 +153,7 @@ def _ensure_worker() -> None:
     with _worker_lock:
         if _worker_started:
             return
-        t = threading.Thread(target=_worker, name='itsm-push', daemon=True)
+        t = threading.Thread(target=_worker, name='servicenow-push', daemon=True)
         t.start()
         _worker_started = True
 
