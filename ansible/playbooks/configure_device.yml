@@ -1,0 +1,29 @@
+---
+- name: Apply demo-safe device settings
+  hosts: all
+  gather_facts: false
+  vars:
+    hostname: ""
+    domain_name: ""
+    dns_server1: ""
+    dns_server2: ""
+    ntp_server: ""
+    syslog_server: ""
+  tasks:
+    - name: Build candidate configuration
+      ansible.builtin.set_fact:
+        candidate_config: >-
+          {{
+            []
+            + ([ 'hostname ' ~ hostname ] if hostname else [])
+            + ([ 'ip domain-name ' ~ domain_name ] if domain_name else [])
+            + ([ 'ip name-server ' ~ dns_server1 ] if dns_server1 else [])
+            + ([ 'ip name-server ' ~ dns_server2 ] if dns_server2 else [])
+            + ([ 'ntp server ' ~ ntp_server ] if ntp_server else [])
+            + ([ 'logging host ' ~ syslog_server ] if syslog_server else [])
+          }}
+
+    - name: Apply candidate configuration
+      cisco.ios.ios_config:
+        lines: "{{ candidate_config }}"
+      when: candidate_config | length > 0

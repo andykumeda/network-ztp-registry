@@ -1,0 +1,13 @@
+---
+- name: Report network OS version
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Collect show version
+      ansible.netcommon.cli_command:
+        command: show version
+      register: version_output
+
+    - name: Show version summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} version output collected"

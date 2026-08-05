@@ -1,0 +1,24 @@
+name: Portfolio Quality Gate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan tracked files and reachable history
+        env:
+          REPOSITORY_DENYLIST: ${{ secrets.REPOSITORY_DENYLIST }}
+        run: python3 scripts/check_repository.py --history
+      - name: Run API and security checks
+        run: |
+          python3 -m pip install -r requirements-demo.txt
+          python3 -m unittest discover -s tests -v

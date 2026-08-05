@@ -1,0 +1,19 @@
+# Python runtime artifacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime data files — never bake into images
+devices.db
+.poller_state.json
+
+# IOS images are large and served via bind mount, not the image
+cat9k_iosxe.*.bin
+
+# Secrets — never bake into images
+.env
+config.json
+
+# Git history
+.git/
