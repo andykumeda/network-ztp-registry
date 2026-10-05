@@ -254,10 +254,23 @@
       <input type="text" id="search" placeholder="Filter by hostname, serial, IP, building…">
     </div>
     <div class="btn-group">
+      <button class="btn-secondary" onclick="startBootDemo()">Simulate Boot</button>
       <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
       <button class="btn-primary" onclick="openModal(null)">+ Add Device</button>
     </div>
   </div>
+
+  <section id="boot-demo" hidden style="margin-bottom:1.25rem">
+    <h2 style="font-size:1rem">Simulated switch console</h2>
+    <p class="dim">Fictional, accelerated boot and ZTP replay. No switch commands are executed and inventory is unchanged.</p>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.75rem">
+      <button class="btn-secondary" id="boot-pause" onclick="toggleBootDemo()">Pause</button>
+      <button class="btn-secondary" onclick="startBootDemo()">Replay</button>
+      <button class="btn-secondary" onclick="closeBootDemo()">Close</button>
+      <span id="boot-status" role="status">Starting</span>
+    </div>
+    <pre class="console-output" id="boot-output" aria-label="Simulated boot console" tabindex="0" style="margin:0;height:340px"></pre>
+  </section>
 
   <!-- Device table -->
   <div class="table-wrap">
@@ -1066,6 +1079,77 @@ ${d.notes ? `<div class="section" style="font-size:8.5pt;color:#555">${esc(d.not
       runBtn.disabled = false;
       runBtn.textContent = '▶ Run';
     }
+  }
+
+  // Fictional replay, independent of the registry and hardware integrations.
+  const bootDemoLines = [
+    ['Booting', 'Boot loader initializing...'],
+    ['Booting', 'Loading fictional IOS XE image from flash...'],
+    ['Booting', 'Initializing interfaces and hardware inventory...'],
+    ['Booting', 'Chassis: C9300-DEMO-48  Serial: DEMO-SERIAL-001'],
+    ['DHCP discovery', 'Startup configuration absent. Beginning Zero Touch Provisioning.'],
+    ['DHCP discovery', 'Management interface link is UP'],
+    ['DHCP discovery', 'DHCPDISCOVER sent; waiting for an offer...'],
+    ['DHCP discovery', 'DHCPACK received: address 192.0.2.101/24, gateway 192.0.2.1'],
+    ['Downloading script', 'DHCP option 67: http://192.0.2.10/ztp.py'],
+    ['Downloading script', 'Downloading ztp.py... complete'],
+    ['Running ZTP', 'Starting on-device Python ZTP script...'],
+    ['Running ZTP', 'Reading serial number and hardware inventory...'],
+    ['Running ZTP', 'Registry lookup: DEMO-SERIAL-001 -> DEMO-SWITCH-001'],
+    ['Configuring', 'Applying hostname DEMO-SWITCH-001 and demo management configuration...'],
+    ['Checking software', 'Software version matches demo target; upgrade skipped.'],
+    ['Saving configuration', 'Saving startup configuration... complete'],
+    ['Registering', 'Submitting fictional inventory to registry... accepted'],
+    ['Complete', 'ZTP complete. DEMO-SWITCH-001 ready for asset review.'],
+    ['Complete', 'DEMO-SWITCH-001>']
+  ];
+  let bootDemoTimer = null;
+  let bootDemoIndex = 0;
+  let bootDemoPaused = false;
+
+  function advanceBootDemo() {
+    const output = document.getElementById('boot-output');
+    const [stage, line] = bootDemoLines[bootDemoIndex++];
+    output.textContent += `[${String(bootDemoIndex).padStart(2, '0')}] ${line}\n`;
+    output.scrollTop = output.scrollHeight;
+    document.getElementById('boot-status').textContent = stage;
+    if (bootDemoIndex < bootDemoLines.length) {
+      bootDemoTimer = setTimeout(advanceBootDemo, 900);
+    } else {
+      bootDemoTimer = null;
+      document.getElementById('boot-pause').disabled = true;
+    }
+  }
+
+  function startBootDemo() {
+    clearTimeout(bootDemoTimer);
+    bootDemoIndex = 0;
+    bootDemoPaused = false;
+    document.getElementById('boot-demo').hidden = false;
+    document.getElementById('boot-output').textContent = '';
+    const pause = document.getElementById('boot-pause');
+    pause.disabled = false;
+    pause.textContent = 'Pause';
+    advanceBootDemo();
+    document.getElementById('boot-output').focus();
+  }
+
+  function toggleBootDemo() {
+    bootDemoPaused = !bootDemoPaused;
+    document.getElementById('boot-pause').textContent = bootDemoPaused ? 'Resume' : 'Pause';
+    if (bootDemoPaused) {
+      clearTimeout(bootDemoTimer);
+      bootDemoTimer = null;
+      document.getElementById('boot-status').textContent = 'Paused';
+    } else {
+      advanceBootDemo();
+    }
+  }
+
+  function closeBootDemo() {
+    clearTimeout(bootDemoTimer);
+    bootDemoTimer = null;
+    document.getElementById('boot-demo').hidden = true;
   }
 
   // ── Init ────────────────────────────────────────

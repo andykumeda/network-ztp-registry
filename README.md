@@ -24,21 +24,24 @@ can run without access to external infrastructure.
 
 ### Python-only demo
 
+Use Python 3.10 or newer (the macOS system Python may be older).
+
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-demo.txt
-python server.py
+.venv/bin/python -m pip install -r requirements-demo.txt
+./launch-demo.command
 ```
 
-In a second terminal:
+Open <http://127.0.0.1:5055/>. On macOS, double-click `launch-demo.command`.
+Other platforms can run `.venv/bin/python scripts/run_demo.py`. The runner seeds
+only missing synthetic records, preserves edits, and forces Ansible execution
+and ITSM delivery off. It uses ignored `.demo/` state. A busy port exits before
+changing data.
 
-```bash
-source .venv/bin/activate
-python scripts/seed_demo.py
-```
-
-Open <http://localhost:5000>.
+Click **Simulate Boot** for a fictional browser-only console replay. It neither
+executes switch commands nor registers devices. **Complete** means building,
+room and asset tag are filled, not proven provisioning or network health.
+See [the demo guide](docs/demo.md) for controls and handoff steps.
 
 ### Docker demo
 
