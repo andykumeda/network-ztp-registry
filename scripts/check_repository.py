@@ -182,7 +182,12 @@ def main() -> int:
     if any(term in metadata.casefold() for term in denylist):
         findings.append("git metadata: denylisted organization identifier")
     metadata_emails = EMAIL_RE.findall(metadata)
-    if any(not email.casefold().endswith('@users.noreply.github.com') for email in metadata_emails):
+    # GitHub's generated PR merge commits use its platform no-reply identity.
+    if any(
+        not email.casefold().endswith('@users.noreply.github.com')
+        and email.casefold() != 'noreply' + '@github.com'
+        for email in metadata_emails
+    ):
         findings.append("git metadata: non-noreply email address")
 
     unique_findings = list(dict.fromkeys(findings))
