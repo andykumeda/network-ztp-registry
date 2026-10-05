@@ -22,3 +22,5 @@ jobs:
         run: |
           python3 -m pip install -r requirements-demo.txt
           python3 -m unittest discover -s tests -v
+      - name: Check simulated boot controls
+        run: node tests/test_boot_replay.cjs

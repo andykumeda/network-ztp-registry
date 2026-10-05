@@ -2,6 +2,7 @@
 config.json
 ztp.py-min
 .venv/
+.demo/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
